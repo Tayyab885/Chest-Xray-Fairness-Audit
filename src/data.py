@@ -23,7 +23,9 @@ def load_metadata(cfg: dict) -> pd.DataFrame:
             lambda s, l=lab: 1 if l in s.split("|") else 0)
     return df
 
-def make_splits(df, cfg, trainval_imgs=None, test_imgs=None):
+def make_splits(df: pd.DataFrame, cfg: dict, trainval_imgs: set = None,
+                test_imgs: set = None) -> dict:
+    """Split df into train/val/test BY Patient ID (leakage-free), deterministic given cfg["seed"]."""
     if trainval_imgs is None or test_imgs is None:
         import os
         with open(os.path.join(cfg["data_dir"], cfg["train_val_list"])) as f:
