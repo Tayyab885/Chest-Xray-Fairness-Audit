@@ -22,3 +22,21 @@ def load_metadata(cfg: dict) -> pd.DataFrame:
         df[lab] = df["Finding Labels"].apply(
             lambda s, l=lab: 1 if l in s.split("|") else 0)
     return df
+
+def make_splits(df, cfg, trainval_imgs=None, test_imgs=None):
+    if trainval_imgs is None or test_imgs is None:
+        import os
+        with open(os.path.join(cfg["data_dir"], cfg["train_val_list"])) as f:
+            trainval_imgs = set(x.strip() for x in f if x.strip())
+        with open(os.path.join(cfg["data_dir"], cfg["test_list"])) as f:
+            test_imgs = set(x.strip() for x in f if x.strip())
+    tv = df[df["Image Index"].isin(trainval_imgs)].copy()
+    test = df[df["Image Index"].isin(test_imgs)].copy()
+    patients = np.array(sorted(tv["Patient ID"].unique()))
+    rng = np.random.default_rng(cfg["seed"])
+    rng.shuffle(patients)
+    n_val = int(len(patients) * cfg["val_frac"])
+    val_pids = set(patients[:n_val])
+    val = tv[tv["Patient ID"].isin(val_pids)].copy()
+    train = tv[~tv["Patient ID"].isin(val_pids)].copy()
+    return {"train": train, "val": val, "test": test}
