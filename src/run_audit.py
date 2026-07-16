@@ -1,5 +1,5 @@
 import os, argparse
-import numpy as np, pandas as pd
+import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 from src.config import load_config
