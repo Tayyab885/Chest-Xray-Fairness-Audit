@@ -1,5 +1,10 @@
+import os
+import logging
 import numpy as np
 import pandas as pd
+import torch
+from PIL import Image
+from torchvision import transforms
 
 def parse_labels(finding_str: str, labels: list) -> list:
     present = set(finding_str.split("|"))
@@ -42,3 +47,48 @@ def make_splits(df: pd.DataFrame, cfg: dict, trainval_imgs: set = None,
     val = tv[tv["Patient ID"].isin(val_pids)].copy()
     train = tv[~tv["Patient ID"].isin(val_pids)].copy()
     return {"train": train, "val": val, "test": test}
+
+
+_IMAGENET_MEAN = [0.485, 0.456, 0.406]
+_IMAGENET_STD = [0.229, 0.224, 0.225]
+
+
+def build_transforms(cfg, train: bool):
+    size = cfg["image_size"]
+    ops = [transforms.Resize((size, size))]
+    if train:
+        ops += [transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(7)]
+    ops += [transforms.Grayscale(num_output_channels=3),
+            transforms.ToTensor(),
+            transforms.Normalize(_IMAGENET_MEAN, _IMAGENET_STD)]
+    return transforms.Compose(ops)
+
+
+class ChestXrayDataset(torch.utils.data.Dataset):
+    def __init__(self, df, cfg, transform, image_root=None):
+        self.cfg = cfg
+        self.transform = transform
+        self.labels = cfg["labels"]
+        self.root = image_root or cfg["data_dir"]
+        rows, missing = [], 0
+        for _, r in df.iterrows():
+            if os.path.exists(os.path.join(self.root, r["Image Index"])):
+                rows.append(r)
+            else:
+                missing += 1
+        if df.shape[0] and missing / df.shape[0] > 0.01:
+            raise RuntimeError(f"{missing}/{df.shape[0]} images missing (>1%)")
+        if missing:
+            logging.warning("Skipped %d missing images", missing)
+        self.df = pd.DataFrame(rows).reset_index(drop=True)
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, i):
+        r = self.df.iloc[i]
+        img = Image.open(os.path.join(self.root, r["Image Index"])).convert("L")
+        x = self.transform(img)
+        y = torch.tensor([float(r[l]) for l in self.labels])
+        return x, y, {"sex": r["sex"], "age_bin": r["age_bin"]}
