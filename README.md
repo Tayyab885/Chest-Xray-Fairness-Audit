@@ -36,12 +36,15 @@ the basis for all data partitioning.
 kaggle datasets download -d nih-chest-xrays/data
 ```
 
-Unzip the archive so that the following live under `data/`:
+Unzip the archive so that the following live somewhere under `data/`:
 
-- the image folders (`images_001` … `images_012`, or a flattened `images/`)
+- the image folders (nested `images_001/images/` … `images_012/images/` is
+  fine as-is — images are located automatically by filename via a recursive
+  scan, no manual flattening required)
 - `Data_Entry_2017.csv` (per-image labels and patient/demographic metadata)
-- `train_val_list.txt`
-- `test_list.txt`
+  directly in `data/`
+- `train_val_list.txt` directly in `data/`
+- `test_list.txt` directly in `data/`
 
 ## Method
 
@@ -97,8 +100,8 @@ consistently across groups, or relies on different (possibly spurious) cues.
 
 As a first mitigation attempt, we retrain the model with a
 `WeightedRandomSampler` that upweights each example by `1 / group-size`,
-balancing the sampling frequency of the demographic subgroups defined above
-(`tag="mitigated"`). The mitigated model is put through the identical
+balancing the sampling frequency of sex subgroups (`group_key="sex"` by
+default; `tag="mitigated"`). The mitigated model is put through the identical
 fairness audit as the baseline, and the resulting gaps are compared directly
 against the baseline — including the outcome where resampling does not
 improve, or worsens, a given gap.

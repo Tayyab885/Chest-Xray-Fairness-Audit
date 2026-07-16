@@ -32,6 +32,21 @@ def test_equalized_odds_planted_tpr_gap():
     assert res["F"]["tpr"] < 0.01        # F never flags a true positive
     assert res["tpr_gap"] > 0.9
 
+def test_subgroup_auroc_column_alignment():
+    import numpy as np
+    from src.fairness import subgroup_auroc
+    full = ["A", "B", "C", "D"]
+    n = 100
+    rng = np.random.default_rng(0)
+    y = rng.integers(0, 2, size=(n, 4))
+    p = rng.random((n, 4))
+    # make column index 1 ("B") perfectly predictive
+    p[:, 1] = y[:, 1] * 0.9 + (1 - y[:, 1]) * 0.1
+    metas = [{"sex": "M" if i % 2 else "F"} for i in range(n)]
+    res = subgroup_auroc(y, p, metas, full, "sex")
+    # B is perfectly predictive within each subgroup -> both group AUROCs ~1.0
+    assert res["B"]["M"] > 0.99 and res["B"]["F"] > 0.99
+
 def test_youden_threshold_separable():
     import numpy as np
     from src.fairness import youden_threshold

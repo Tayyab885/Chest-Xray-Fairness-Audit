@@ -13,17 +13,11 @@ def build_group_sampler(train_df, group_key) -> WeightedRandomSampler:
 
 
 def run_mitigation(cfg: dict, group_key: str = "sex") -> str:
-	"""Run training with group-balanced sampling to mitigate fairness gaps."""
-	from src.data import load_metadata, make_splits
-	df = load_metadata(cfg)
-	if cfg["subsample_frac"] < 1.0:
-		df = df.sample(frac=cfg["subsample_frac"], random_state=cfg["seed"])
-	train_df = make_splits(df, cfg)["train"]
-	sampler = build_group_sampler(train_df, group_key)
-	return run_training(cfg, sampler=sampler, tag="mitigated")
+	"""Retrain with group-balanced resampling on `group_key`, tagged 'mitigated'."""
+	return run_training(cfg, balance_group=group_key, tag="mitigated")
 
 
 if __name__ == "__main__":
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    run_mitigation(load_config())
+	import logging
+	logging.basicConfig(level=logging.INFO)
+	run_mitigation(load_config())

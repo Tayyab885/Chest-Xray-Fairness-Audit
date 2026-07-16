@@ -28,7 +28,7 @@ def train_one_epoch(model, loader, optimizer, scaler, device):
     return total / max(n, 1)
 
 
-def run_training(cfg, sampler=None, tag="baseline"):
+def run_training(cfg, balance_group=None, tag="baseline"):
     """Full training pipeline with early stopping on val macro AUROC. Returns best checkpoint path."""
     if not torch.cuda.is_available():
         raise SystemExit("No GPU detected. Full training requires CUDA. Aborting.")
@@ -45,6 +45,10 @@ def run_training(cfg, sampler=None, tag="baseline"):
     # Build datasets and loaders
     train_ds = ChestXrayDataset(splits["train"], cfg, build_transforms(cfg, True))
     val_ds = ChestXrayDataset(splits["val"], cfg, build_transforms(cfg, False))
+    sampler = None
+    if balance_group is not None:
+        from src.mitigate import build_group_sampler
+        sampler = build_group_sampler(train_ds.df, balance_group)  # post-filter frame
     train_loader = DataLoader(
         train_ds,
         batch_size=cfg["batch_size"],

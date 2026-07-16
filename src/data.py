@@ -17,7 +17,6 @@ def age_to_bin(age: int, bins: list, bin_labels: list) -> str:
     return bin_labels[-1]
 
 def load_metadata(cfg: dict) -> pd.DataFrame:
-    import os
     df = pd.read_csv(os.path.join(cfg["data_dir"], cfg["csv_name"]))
     df = df[(df["Patient Age"] > 0) & (df["Patient Age"] <= 100)].copy()
     df["age_bin"] = df["Patient Age"].apply(
@@ -32,7 +31,6 @@ def make_splits(df: pd.DataFrame, cfg: dict, trainval_imgs: set = None,
                 test_imgs: set = None) -> dict:
     """Split df into train/val/test BY Patient ID (leakage-free), deterministic given cfg["seed"]."""
     if trainval_imgs is None or test_imgs is None:
-        import os
         with open(os.path.join(cfg["data_dir"], cfg["train_val_list"])) as f:
             trainval_imgs = set(x.strip() for x in f if x.strip())
         with open(os.path.join(cfg["data_dir"], cfg["test_list"])) as f:
@@ -71,9 +69,10 @@ class ChestXrayDataset(torch.utils.data.Dataset):
         self.transform = transform
         self.labels = cfg["labels"]
         self.root = image_root or cfg["data_dir"]
+        self._path_map = self._index_images(self.root)
         rows, missing = [], 0
         for _, r in df.iterrows():
-            if os.path.exists(os.path.join(self.root, r["Image Index"])):
+            if r["Image Index"] in self._path_map:
                 rows.append(r)
             else:
                 missing += 1
@@ -83,12 +82,21 @@ class ChestXrayDataset(torch.utils.data.Dataset):
             logging.warning("Skipped %d missing images", missing)
         self.df = pd.DataFrame(rows).reset_index(drop=True)
 
+    @staticmethod
+    def _index_images(root):
+        m = {}
+        for dp, _, files in os.walk(root):
+            for f in files:
+                if f.lower().endswith((".png", ".jpg", ".jpeg")):
+                    m.setdefault(f, os.path.join(dp, f))
+        return m
+
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, i):
         r = self.df.iloc[i]
-        img = Image.open(os.path.join(self.root, r["Image Index"])).convert("L")
+        img = Image.open(self._path_map[r["Image Index"]]).convert("L")
         x = self.transform(img)
         y = torch.tensor([float(r[l]) for l in self.labels])
         return x, y, {"sex": r["sex"], "age_bin": r["age_bin"]}

@@ -24,7 +24,9 @@ def subgroup_auroc(y_true: np.ndarray, y_prob: np.ndarray, metas: list, labels: 
 	return out
 
 def youden_threshold(y_true_col: np.ndarray, y_prob_col: np.ndarray) -> float:
-	"""Find threshold maximizing TPR - FPR."""
+	"""Find threshold maximizing TPR - FPR (Youden's J); 0.5 if only one class present."""
+	if len(np.unique(y_true_col)) < 2:
+		return 0.5
 	fpr, tpr, thr = roc_curve(y_true_col, y_prob_col)
 	return float(thr[np.argmax(tpr - fpr)])
 

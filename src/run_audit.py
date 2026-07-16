@@ -29,7 +29,8 @@ def main():
     auroc = compute_auroc(yt, yp, cfg["labels"])
     pd.Series(auroc).to_csv(os.path.join(cfg["results_dir"], "auroc.csv"))
     for key, fname in [("sex", "fairness_sex.csv"), ("age_bin", "fairness_age.csv")]:
-        sg = subgroup_auroc(yt, yp, metas, cfg["deep_dive_labels"], key)
+        sg_full = subgroup_auroc(yt, yp, metas, cfg["labels"], key)
+        sg = {lab: sg_full[lab] for lab in cfg["deep_dive_labels"]}
         pd.DataFrame(sg).T.to_csv(os.path.join(cfg["results_dir"], fname))
     rows = []
     for lab in cfg["deep_dive_labels"]:
