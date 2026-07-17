@@ -49,14 +49,15 @@ def run_training(cfg, balance_group=None, tag="baseline"):
     if balance_group is not None:
         from src.mitigate import build_group_sampler
         sampler = build_group_sampler(train_ds.df, balance_group)  # post-filter frame
+    workers = cfg.get("num_workers", 2)
     train_loader = DataLoader(
         train_ds,
         batch_size=cfg["batch_size"],
         shuffle=(sampler is None),
         sampler=sampler,
-        num_workers=2
+        num_workers=workers
     )
-    val_loader = DataLoader(val_ds, batch_size=cfg["batch_size"], num_workers=2)
+    val_loader = DataLoader(val_ds, batch_size=cfg["batch_size"], num_workers=workers)
 
     # Build model, optimizer, AMP scaler
     model = build_model(len(cfg["labels"]), pretrained=True).to(device)

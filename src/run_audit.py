@@ -13,17 +13,14 @@ def _load(cfg, ckpt, device):
     m.load_state_dict(torch.load(ckpt, map_location=device, weights_only=True))
     return m.to(device)
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--checkpoint", required=True)
-    args = ap.parse_args()
-    cfg = load_config()
+def audit(cfg: dict, checkpoint: str) -> str:
+    """Evaluate `checkpoint` on the test split, write metric + fairness tables to cfg["results_dir"]."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     df = load_metadata(cfg)
     test_df = make_splits(df, cfg)["test"]
     ds = ChestXrayDataset(test_df, cfg, build_transforms(cfg, False))
-    loader = DataLoader(ds, batch_size=cfg["batch_size"], num_workers=2)
-    model = _load(cfg, args.checkpoint, device)
+    loader = DataLoader(ds, batch_size=cfg["batch_size"], num_workers=cfg.get("num_workers", 2))
+    model = _load(cfg, checkpoint, device)
     yt, yp, metas = predict(model, loader, device)
     os.makedirs(cfg["results_dir"], exist_ok=True)
     auroc = compute_auroc(yt, yp, cfg["labels"])
@@ -43,6 +40,14 @@ def main():
                      "tpr_gap": eo["tpr_gap"], "fpr_gap": eo["fpr_gap"]})
     pd.DataFrame(rows).to_csv(os.path.join(cfg["results_dir"], "eqodds.csv"), index=False)
     print("Audit complete. Results in", cfg["results_dir"])
+    return cfg["results_dir"]
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--checkpoint", required=True)
+    ap.add_argument("--config", default="configs/default.yaml")
+    args = ap.parse_args()
+    audit(load_config(args.config), args.checkpoint)
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,36 @@
+# Kaggle GPU config. Dataset "nih-chest-xrays/data" mounts read-only at /kaggle/input/data
+# with the same layout as a local download, so only paths and loader width change here.
+data_dir: /kaggle/input/data
+csv_name: Data_Entry_2017.csv
+train_val_list: train_val_list.txt
+test_list: test_list.txt
+image_size: 224
+batch_size: 64
+lr: 0.0001
+epochs: 15
+early_stop_patience: 3
+subsample_frac: 1.0
+val_frac: 0.15
+seed: 42
+num_workers: 4
+labels:
+  - Atelectasis
+  - Cardiomegaly
+  - Consolidation
+  - Edema
+  - Effusion
+  - Emphysema
+  - Fibrosis
+  - Hernia
+  - Infiltration
+  - Mass
+  - Nodule
+  - Pleural_Thickening
+  - Pneumonia
+  - Pneumothorax
+deep_dive_labels: [Cardiomegaly, Effusion, Atelectasis, Pneumothorax]
+age_bins: [0, 40, 60, 80, 200]
+age_bin_labels: ["<40", "40-60", "60-80", "80+"]
+# /kaggle/input is read-only; writes must land in /kaggle/working to survive the commit
+checkpoint_dir: /kaggle/working/checkpoints
+results_dir: /kaggle/working/results
