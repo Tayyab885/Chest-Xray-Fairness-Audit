@@ -61,10 +61,12 @@ patient-ID overlap between every pair of splits, and it gates the build.
 The classifier is a DenseNet121 backbone pretrained on ImageNet with a 14-way sigmoid
 output head, one unit per pathology, trained with `BCEWithLogitsLoss` for independent
 multi-label prediction. Images are resized to 224×224 and trained with mixed precision
-(AMP) at batch size 16 to fit the target GPU (NVIDIA RTX 3050, 6GB VRAM). Training
-requires CUDA. A guard in the training entry point raises `SystemExit` when no CUDA
-device is visible, which stops a run from quietly falling back to CPU and producing
-timings and results that represent nothing.
+(AMP). The reported results come from a full-data run on a Kaggle T4 (batch size 64,
+`configs/kaggle.yaml`); the config also ships a batch-size-16 default that fits a 6GB
+laptop GPU (NVIDIA RTX 3050) for local iteration. Training requires CUDA. A guard in the
+training entry point raises `SystemExit` when no CUDA device is visible, which stops a
+run from quietly falling back to CPU and producing timings and results that represent
+nothing.
 
 ### Fairness metrics
 
@@ -120,71 +122,124 @@ a random patient-level subsample.
 
 ## Results
 
-_Results pending the full training run. The tables below are empty on purpose. They
-will be filled from the audit output, not from estimates._
+All numbers below are read directly from the audit CSVs in `results/baseline/`
+and `results/mitigated/`. The reported model is the baseline unless a column
+says otherwise. Training early-stopped on validation macro AUROC (best at epoch
+5, patience 3); the test macro AUROC is 0.801, below the 0.840 validation peak,
+as expected for held-out data.
 
-**(a) Per-label and macro AUROC**
+**(a) Per-label and macro AUROC** (baseline, test set)
 
 | Label | AUROC |
 |---|---|
-| Atelectasis | |
-| Cardiomegaly | |
-| Consolidation | |
-| Edema | |
-| Effusion | |
-| Emphysema | |
-| Fibrosis | |
-| Hernia | |
-| Infiltration | |
-| Mass | |
-| Nodule | |
-| Pleural Thickening | |
-| Pneumonia | |
-| Pneumothorax | |
-| **Macro** | |
+| Atelectasis | 0.764 |
+| Cardiomegaly | 0.869 |
+| Consolidation | 0.741 |
+| Edema | 0.819 |
+| Effusion | 0.827 |
+| Emphysema | 0.900 |
+| Fibrosis | 0.792 |
+| Hernia | 0.917 |
+| Infiltration | 0.684 |
+| Mass | 0.807 |
+| Nodule | 0.755 |
+| Pleural Thickening | 0.768 |
+| Pneumonia | 0.712 |
+| Pneumothorax | 0.859 |
+| **Macro** | **0.801** |
 
-**(b) Subgroup AUROC and gap by sex**
+The per-label ordering matches what the ChestX-ray14 literature reports:
+Hernia, Emphysema, and Cardiomegaly rank highest, while Infiltration and
+Pneumonia sit near 0.68-0.71.
+
+**(b) Subgroup AUROC and gap by sex** (baseline)
 
 | Label | AUROC (M) | AUROC (F) | Gap |
 |---|---|---|---|
-| Cardiomegaly | | | |
-| Effusion | | | |
-| Atelectasis | | | |
-| Pneumothorax | | | |
+| Cardiomegaly | 0.872 | 0.866 | 0.007 |
+| Effusion | 0.834 | 0.816 | 0.018 |
+| Atelectasis | 0.773 | 0.752 | 0.021 |
+| Pneumothorax | 0.856 | 0.867 | 0.011 |
 
-**(b2) Subgroup AUROC and gap by age**
+Sex AUROC gaps are small (all below 0.021). By ranking ability alone, the
+baseline is roughly even across sex on these four labels.
+
+**(b2) Subgroup AUROC and gap by age** (baseline)
 
 | Label | <40 | 40-60 | 60-80 | 80+ | Gap |
 |---|---|---|---|---|---|
-| Cardiomegaly | | | | | |
-| Effusion | | | | | |
-| Atelectasis | | | | | |
-| Pneumothorax | | | | | |
+| Cardiomegaly | 0.866 | 0.883 | 0.835 | 0.895 | 0.060 |
+| Effusion | 0.825 | 0.822 | 0.834 | 0.798 | 0.036 |
+| Atelectasis | 0.780 | 0.751 | 0.759 | 0.622 | 0.158 |
+| Pneumothorax | 0.862 | 0.861 | 0.861 | 0.760 | 0.102 |
 
-**(c) Equalized-odds gaps at Youden-J operating point**
+Age is where the model breaks down. Atelectasis AUROC on the 80+ group falls to
+0.622 against 0.780 for under-40 (gap 0.158), and Pneumothorax drops to 0.760 on
+80+ (gap 0.102). The oldest patients get the worst predictions on exactly the
+labels where a miss matters clinically.
 
-| Label | TPR gap (sex) | FPR gap (sex) | TPR gap (age) | FPR gap (age) |
+**(c) Equalized-odds gaps at Youden-J operating point** (baseline)
+
+| Label | TPR gap (sex) | FPR gap (sex) |
+|---|---|---|
+| Cardiomegaly | 0.020 | 0.016 |
+| Effusion | 0.001 | 0.023 |
+| Atelectasis | 0.051 | 0.011 |
+| Pneumothorax | 0.125 | 0.098 |
+
+Equalized odds is computed for the sex subgroups only. The standout is
+Pneumothorax: at a single decision threshold the model catches true positives
+in women far more often than in men (TPR 0.86 vs 0.74, gap 0.125) and also fires
+more false positives on women (FPR gap 0.098). A gap this size in a threshold-based
+decision is the kind of disparity aggregate AUROC hides.
+
+**(d) Baseline vs. mitigated gap comparison** (sex subgroups)
+
+Mitigation is the `WeightedRandomSampler` retrain described in Method. It targets
+the sex subgroups, so the comparison that matters is on the equalized-odds gaps it
+optimizes. Negative Δ means the gap shrank (fairer).
+
+| Label | Metric | Baseline | Mitigated | Δ |
 |---|---|---|---|---|
-| Cardiomegaly | | | | |
-| Effusion | | | | |
-| Atelectasis | | | | |
-| Pneumothorax | | | | |
+| Cardiomegaly | TPR gap (sex) | 0.020 | 0.089 | +0.069 |
+| Effusion | TPR gap (sex) | 0.001 | 0.004 | +0.003 |
+| Atelectasis | TPR gap (sex) | 0.051 | 0.028 | −0.023 |
+| Pneumothorax | TPR gap (sex) | 0.125 | 0.095 | −0.029 |
+| Cardiomegaly | FPR gap (sex) | 0.016 | 0.027 | +0.011 |
+| Effusion | FPR gap (sex) | 0.023 | 0.017 | −0.006 |
+| Atelectasis | FPR gap (sex) | 0.011 | 0.001 | −0.010 |
+| Pneumothorax | FPR gap (sex) | 0.098 | 0.064 | −0.034 |
 
-**(d) Baseline vs. mitigated gap comparison**
-
-| Label | Metric | Baseline gap | Mitigated gap | Δ |
-|---|---|---|---|---|
-| Cardiomegaly | AUROC gap (sex) | | | |
-| Effusion | AUROC gap (sex) | | | |
-| Atelectasis | AUROC gap (sex) | | | |
-| Pneumothorax | AUROC gap (sex) | | | |
+Macro AUROC moves only 0.801 → 0.797 under mitigation, so accuracy is essentially
+preserved. The fairness effect is mixed rather than a clean win: FPR gaps narrow on
+three of four labels, and the largest disparity (Pneumothorax) improves on both TPR
+and FPR. But the Cardiomegaly TPR gap blows up roughly fourfold (0.020 → 0.089),
+which drags the mean TPR gap the wrong way (0.049 → 0.054). Group-balanced resampling
+did not reliably close the equalized-odds gaps here, and it regressed one label badly.
 
 ## Fairness Findings
 
-_Pending the full training run._ This section will report which subgroups, by sex and
-by age bin, show the largest AUROC and equalized-odds gaps for each deep-dive label,
-whether those gaps agree across metrics, and what group-balanced resampling does to
-them. If the mitigation fails to help, that is what will appear here.
+Three findings hold up across the metrics above.
+
+**Age drives the largest disparities, not sex.** The baseline's sex AUROC gaps stay
+under 0.021, but its age gaps reach 0.158 (Atelectasis) and 0.102 (Pneumothorax),
+concentrated in the 80+ bin. The AUROC gaps and the equalized-odds gaps agree on
+direction for the sex axis: Pneumothorax is the worst offender on both the ranking
+metric and the threshold-based one.
+
+**The worst subgroup harm is a threshold effect the aggregate score hides.** On
+Pneumothorax, the baseline reaches 0.859 macro-label AUROC yet still splits TPR by
+0.125 between sexes at its operating point. Ranking ability and decision fairness are
+not the same property, and this project measures both because a model can look even on
+one and be badly skewed on the other.
+
+**A naive mitigation is not a reliable fix.** Group-balanced resampling on sex left
+macro AUROC essentially unchanged (0.801 → 0.797) and narrowed most FPR gaps, but it
+did not close the TPR gaps overall and quadrupled the Cardiomegaly TPR gap
+(0.020 → 0.089). Reporting this negative result is the point: subgroup fairness has to
+be measured per label and per metric after any intervention, because an intervention
+that helps in aggregate can still regress a specific label, and only a direct
+before/after audit surfaces it.
 
 ## Grad-CAM
 

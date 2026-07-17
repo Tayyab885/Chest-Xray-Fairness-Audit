@@ -3,8 +3,8 @@ data/
 *.png
 *.tar.gz
 *.csv
-!results/*.csv
-!results/*.png
+!results/**/*.csv
+!results/**/*.png
 
 # Model checkpoints
 *.pt
