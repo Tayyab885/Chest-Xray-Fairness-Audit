@@ -4,18 +4,19 @@
 
 Deep learning models for chest radiograph interpretation are approaching
 radiologist-level performance on aggregate metrics, but aggregate accuracy can
-mask systematic underperformance on specific patient subgroups — a failure
-mode with direct clinical consequences if such models are deployed for
-triage or diagnosis. This project trains a DenseNet121 multi-label classifier
+mask systematic underperformance on specific patient subgroups. This is a
+failure mode with direct clinical consequences if such models are deployed
+for triage or diagnosis. This project trains a DenseNet121 multi-label classifier
 for 14 thoracic pathologies on the NIH ChestX-ray14 dataset using
 leakage-free, patient-level data splits, then audits the model for
 performance disparities across sex and age subgroups using per-subgroup
 AUROC gaps and equalized-odds TPR/FPR gaps. We further attempt a
 group-balanced resampling mitigation and report whether it narrows the
 observed gaps, without adjusting the story to fit a preferred outcome. The
-contribution here is not a leaderboard score: it is a transparent, leakage-
-free methodology for measuring and reporting subgroup fairness in medical
-image classifiers, including honest reporting when mitigation does not work.
+contribution here is not a leaderboard score. It is a transparent,
+leakage-free methodology for measuring and reporting subgroup fairness in
+medical image classifiers, including honest reporting when mitigation does
+not work.
 
 ## Dataset
 
@@ -25,7 +26,7 @@ labeled for the presence of up to 14 thoracic pathologies (Atelectasis,
 Cardiomegaly, Consolidation, Edema, Effusion, Emphysema, Fibrosis, Hernia,
 Infiltration, Mass, Nodule, Pleural Thickening, Pneumonia, Pneumothorax).
 Labels were extracted from radiology reports using NLP mining rather than
-per-image expert adjudication, and are therefore noisy — see Limitations.
+per-image expert adjudication, and are therefore noisy (see Limitations).
 The release also ships an official patient-level train/validation and test
 split (`train_val_list.txt`, `test_list.txt`), which this project uses as
 the basis for all data partitioning.
@@ -38,9 +39,9 @@ kaggle datasets download -d nih-chest-xrays/data
 
 Unzip the archive so that the following live somewhere under `data/`:
 
-- the image folders (nested `images_001/images/` … `images_012/images/` is
-  fine as-is — images are located automatically by filename via a recursive
-  scan, no manual flattening required)
+- the image folders (nested `images_001/images/` ... `images_012/images/` is
+  fine as-is, since images are located automatically by filename via a
+  recursive scan, with no manual flattening required)
 - `Data_Entry_2017.csv` (per-image labels and patient/demographic metadata)
   directly in `data/`
 - `train_val_list.txt` directly in `data/`
@@ -51,8 +52,8 @@ Unzip the archive so that the following live somewhere under `data/`:
 ### Leakage-free patient-level splits
 
 A model can trivially inflate its validation/test AUROC if images from the
-same patient appear in more than one split — different views or follow-up
-scans of one patient are highly correlated. We use the official NIH
+same patient appear in more than one split, because different views or
+follow-up scans of one patient are highly correlated. We use the official NIH
 `train_val_list.txt` / `test_list.txt` partition, which is already defined
 by patient rather than by image, and carve the validation set out of
 `train_val_list.txt` by patient ID rather than by image ID, so that no
@@ -77,14 +78,14 @@ Subgroups are defined by sex (M/F) and age, binned into `<40`, `40-60`,
 `60-80`, `80+`. For a fixed set of deep-dive labels (Cardiomegaly, Effusion,
 Atelectasis, Pneumothorax), we report:
 
-- **Per-subgroup AUROC and gap** — AUROC computed separately within each
+- **Per-subgroup AUROC and gap.** AUROC computed separately within each
   subgroup for a given label; the gap is `max(AUROC) - min(AUROC)` across
   subgroups. A large gap means the model discriminates disease presence
   much better for some groups than others, independent of any decision
   threshold.
-- **Equalized-odds TPR/FPR gaps** — at a single operating point (probability
+- **Equalized-odds TPR/FPR gaps.** At a single operating point (probability
   threshold chosen on the validation set via Youden's J statistic, i.e. the
-  point maximizing TPR − FPR), we compute the true-positive-rate and
+  point maximizing TPR - FPR), we compute the true-positive-rate and
   false-positive-rate gap between subgroups. This captures disparities in
   the model's actual clinical decisions, not just its ranking ability.
 
@@ -103,7 +104,7 @@ As a first mitigation attempt, we retrain the model with a
 balancing the sampling frequency of sex subgroups (`group_key="sex"` by
 default; `tag="mitigated"`). The mitigated model is put through the identical
 fairness audit as the baseline, and the resulting gaps are compared directly
-against the baseline — including the outcome where resampling does not
+against the baseline, including the outcome where resampling does not
 improve, or worsens, a given gap.
 
 ## Reproducing
@@ -149,7 +150,7 @@ _Results pending full training run._
 | Pneumothorax | |
 | **Macro** | |
 
-**(b) Subgroup AUROC and gap — sex**
+**(b) Subgroup AUROC and gap by sex**
 
 | Label | AUROC (M) | AUROC (F) | Gap |
 |---|---|---|---|
@@ -158,7 +159,7 @@ _Results pending full training run._
 | Atelectasis | | | |
 | Pneumothorax | | | |
 
-**(b·2) Subgroup AUROC and gap — age**
+**(b2) Subgroup AUROC and gap by age**
 
 | Label | <40 | 40-60 | 60-80 | 80+ | Gap |
 |---|---|---|---|---|---|
@@ -190,7 +191,7 @@ _Results pending full training run._
 _Pending full training run._ This section will summarize which subgroups
 (by sex and by age bin) show the largest AUROC and equalized-odds gaps for
 each deep-dive label, whether those gaps are consistent across metrics, and
-whether group-balanced resampling narrows them — reported honestly even if
+whether group-balanced resampling narrows them, reported honestly even if
 mitigation provides no improvement or worsens a gap.
 
 ## Grad-CAM
@@ -210,7 +211,7 @@ regions across sex and age groups.
   schedule; absolute AUROC is not expected to match large-scale results such
   as CheXNet, which trained on more compute.
 - **Demographic coverage.** NIH ChestX-ray14 provides only sex and age
-  metadata — no race or ethnicity — so this fairness audit is necessarily
+  metadata, with no race or ethnicity, so this fairness audit is necessarily
   limited to those two axes and cannot speak to disparities along other
   clinically relevant demographic dimensions.
 - **Single-dataset scope.** All results come from one institution's dataset
