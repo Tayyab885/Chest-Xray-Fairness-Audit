@@ -4,12 +4,12 @@ data/
 *.tar.gz
 *.csv
 !results/*.csv
+!results/*.png
 
 # Model checkpoints
 *.pt
 *.pth
 checkpoints/
-
 
 # Python
 __pycache__/
