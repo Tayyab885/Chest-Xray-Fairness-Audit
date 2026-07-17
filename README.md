@@ -2,21 +2,18 @@
 
 ## Abstract
 
-Deep learning models for chest radiograph interpretation are approaching
-radiologist-level performance on aggregate metrics, but aggregate accuracy can
-mask systematic underperformance on specific patient subgroups. This is a
-failure mode with direct clinical consequences if such models are deployed
-for triage or diagnosis. This project trains a DenseNet121 multi-label classifier
-for 14 thoracic pathologies on the NIH ChestX-ray14 dataset using
-leakage-free, patient-level data splits, then audits the model for
-performance disparities across sex and age subgroups using per-subgroup
-AUROC gaps and equalized-odds TPR/FPR gaps. We further attempt a
-group-balanced resampling mitigation and report whether it narrows the
-observed gaps, without adjusting the story to fit a preferred outcome. The
-contribution here is not a leaderboard score. It is a transparent,
-leakage-free methodology for measuring and reporting subgroup fairness in
-medical image classifiers, including honest reporting when mitigation does
-not work.
+Deep learning models for chest radiograph interpretation now approach
+radiologist-level performance on aggregate metrics. Aggregate accuracy can still
+hide systematic underperformance on particular patient subgroups, which has direct
+clinical consequences once a model is deployed for triage or diagnosis. This project
+trains a DenseNet121 multi-label classifier for 14 thoracic pathologies on the NIH
+ChestX-ray14 dataset using leakage-free, patient-level data splits, then audits it
+for performance disparities across sex and age subgroups using per-subgroup AUROC
+gaps and equalized-odds TPR/FPR gaps. We also attempt a group-balanced resampling
+mitigation and report whether it narrows the observed gaps, including the case where
+it does not. What the project offers is a reproducible protocol for measuring and
+reporting subgroup fairness in medical image classifiers, together with the results
+that protocol produces, whichever direction they point.
 
 ## Dataset
 
@@ -51,26 +48,23 @@ Unzip the archive so that the following live somewhere under `data/`:
 
 ### Leakage-free patient-level splits
 
-A model can trivially inflate its validation/test AUROC if images from the
-same patient appear in more than one split, because different views or
-follow-up scans of one patient are highly correlated. We use the official NIH
-`train_val_list.txt` / `test_list.txt` partition, which is already defined
-by patient rather than by image, and carve the validation set out of
-`train_val_list.txt` by patient ID rather than by image ID, so that no
-patient's images are split across train and validation. A dedicated unit
-test asserts zero patient-ID overlap between every pair of splits; this test
-is treated as a release gate, not an afterthought.
+A model can inflate its validation and test AUROC if images from the same patient
+appear in more than one split, because different views or follow-up scans of one
+patient are highly correlated. We use the official NIH `train_val_list.txt` and
+`test_list.txt` partition, which is already defined by patient rather than by image,
+and carve the validation set out of `train_val_list.txt` by patient ID, so no
+patient's images are split across train and validation. A unit test asserts zero
+patient-ID overlap between every pair of splits, and it gates the build.
 
 ### Model & training
 
-The classifier is a DenseNet121 backbone pretrained on ImageNet with a
-14-way sigmoid output head, one unit per pathology, trained with
-`BCEWithLogitsLoss` for independent multi-label prediction. Images are
-resized to 224×224 and trained with mixed precision (AMP) at batch size 16
-to fit the target GPU (NVIDIA RTX 3050, 6GB VRAM). Training requires CUDA;
-a guard in the training entry point raises `SystemExit` if no CUDA device is
-available, so that a run never silently proceeds on CPU and produces an
-unrepresentative timing/quality result.
+The classifier is a DenseNet121 backbone pretrained on ImageNet with a 14-way sigmoid
+output head, one unit per pathology, trained with `BCEWithLogitsLoss` for independent
+multi-label prediction. Images are resized to 224×224 and trained with mixed precision
+(AMP) at batch size 16 to fit the target GPU (NVIDIA RTX 3050, 6GB VRAM). Training
+requires CUDA. A guard in the training entry point raises `SystemExit` when no CUDA
+device is visible, which stops a run from quietly falling back to CPU and producing
+timings and results that represent nothing.
 
 ### Fairness metrics
 
@@ -78,34 +72,32 @@ Subgroups are defined by sex (M/F) and age, binned into `<40`, `40-60`,
 `60-80`, `80+`. For a fixed set of deep-dive labels (Cardiomegaly, Effusion,
 Atelectasis, Pneumothorax), we report:
 
-- **Per-subgroup AUROC and gap.** AUROC computed separately within each
-  subgroup for a given label; the gap is `max(AUROC) - min(AUROC)` across
-  subgroups. A large gap means the model discriminates disease presence
-  much better for some groups than others, independent of any decision
-  threshold.
-- **Equalized-odds TPR/FPR gaps.** At a single operating point (probability
-  threshold chosen on the validation set via Youden's J statistic, i.e. the
-  point maximizing TPR - FPR), we compute the true-positive-rate and
-  false-positive-rate gap between subgroups. This captures disparities in
-  the model's actual clinical decisions, not just its ranking ability.
+- Per-subgroup AUROC and its gap. AUROC is computed separately within each subgroup
+  for a given label, and the gap is `max(AUROC) - min(AUROC)` across subgroups. A
+  large gap means the model discriminates disease presence much better for some
+  groups than others, independent of any decision threshold.
+- Equalized-odds TPR and FPR gaps. At a single operating point (probability threshold
+  chosen on the validation set via Youden's J statistic, the point maximizing
+  TPR - FPR), we compute the true-positive-rate and false-positive-rate gap between
+  subgroups. These capture disparities in the decisions the model would actually
+  make, which its ranking ability alone can hide.
 
 ### Explainability
 
-Grad-CAM is computed on the last convolutional block of the DenseNet121
-backbone (`features.norm5`) to visualize which image regions drive each
-prediction. Saliency maps are generated per subgroup for the deep-dive
-labels to inspect whether the model attends to clinically plausible regions
-consistently across groups, or relies on different (possibly spurious) cues.
+Grad-CAM runs on the last convolutional block of the DenseNet121 backbone
+(`features.norm5`) to show which image regions drive each prediction. We generate
+saliency maps per subgroup for the deep-dive labels, to check whether the model
+attends to clinically plausible regions consistently across groups or picks up
+different, possibly spurious cues for different groups.
 
 ### Mitigation
 
-As a first mitigation attempt, we retrain the model with a
-`WeightedRandomSampler` that upweights each example by `1 / group-size`,
-balancing the sampling frequency of sex subgroups (`group_key="sex"` by
-default; `tag="mitigated"`). The mitigated model is put through the identical
-fairness audit as the baseline, and the resulting gaps are compared directly
-against the baseline, including the outcome where resampling does not
-improve, or worsens, a given gap.
+As a first mitigation attempt, we retrain the model with a `WeightedRandomSampler`
+that upweights each example by `1 / group-size`, equalizing how often each sex
+subgroup is sampled (`group_key="sex"` by default, `tag="mitigated"`). The mitigated
+model goes through the same fairness audit as the baseline, and we compare the gaps
+directly. Resampling may leave a gap unchanged or widen it, and those outcomes are
+reported alongside the ones where it helps.
 
 ## Reproducing
 
@@ -128,7 +120,8 @@ a random patient-level subsample.
 
 ## Results
 
-_Results pending full training run._
+_Results pending the full training run. The tables below are empty on purpose. They
+will be filled from the audit output, not from estimates._
 
 **(a) Per-label and macro AUROC**
 
@@ -188,11 +181,10 @@ _Results pending full training run._
 
 ## Fairness Findings
 
-_Pending full training run._ This section will summarize which subgroups
-(by sex and by age bin) show the largest AUROC and equalized-odds gaps for
-each deep-dive label, whether those gaps are consistent across metrics, and
-whether group-balanced resampling narrows them, reported honestly even if
-mitigation provides no improvement or worsens a gap.
+_Pending the full training run._ This section will report which subgroups, by sex and
+by age bin, show the largest AUROC and equalized-odds gaps for each deep-dive label,
+whether those gaps agree across metrics, and what group-balanced resampling does to
+them. If the mitigation fails to help, that is what will appear here.
 
 ## Grad-CAM
 
