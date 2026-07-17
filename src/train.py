@@ -33,6 +33,15 @@ def run_training(cfg, balance_group=None, tag="baseline"):
     if not torch.cuda.is_available():
         raise SystemExit("No GPU detected. Full training requires CUDA. Aborting.")
     device = torch.device("cuda")
+    # is_available() reports only that a CUDA device exists, not that this torch build can
+    # run on it: a card below the build's minimum compute capability passes the check above
+    # and then fails on the first kernel. Launch one to find out now, not an epoch in.
+    try:
+        torch.zeros(8, device=device).sum().item()
+    except RuntimeError as e:
+        raise SystemExit(
+            f"GPU present but unusable: {torch.cuda.get_device_name(0)} -> {e}"
+        ) from e
 
     # Load and optionally subsample metadata
     df = load_metadata(cfg)
