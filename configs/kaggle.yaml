@@ -1,6 +1,8 @@
-# Kaggle GPU config. Dataset "nih-chest-xrays/data" mounts read-only at /kaggle/input/data
-# with the same layout as a local download, so only paths and loader width change here.
-data_dir: /kaggle/input/data
+# Kaggle GPU config. Dataset "nih-chest-xrays/data" mounts read-only, with the same internal
+# layout as a local download, so only paths and loader width change here.
+# Kaggle nests organization-owned datasets under datasets/organizations/<org>/<slug>; this is
+# NOT the documented /kaggle/input/<slug>. Verified by find on 2026-07-17.
+data_dir: /kaggle/input/datasets/organizations/nih-chest-xrays/data
 csv_name: Data_Entry_2017.csv
 train_val_list: train_val_list.txt
 test_list: test_list.txt
