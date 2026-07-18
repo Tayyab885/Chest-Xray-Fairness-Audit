@@ -1,0 +1,104 @@
+# Where a Chest X-ray Classifier Fails: An Age-First Fairness Audit and a Mitigation That Does Not Hold
+
+**Muhammad Tayyab**
+
+*Workshop preprint. Target venues: MIDL, MICCAI FAIMI, ISBI. arXiv preprint as fallback.*
+
+## Abstract
+
+Deep classifiers for chest radiographs report aggregate AUROC close to radiologist level, but a single aggregate number can hide systematic underperformance on specific patient subgroups. We train a DenseNet121 multi-label classifier for 14 thoracic pathologies on NIH ChestX-ray14 with leakage-free patient-level splits, then audit it across sex and age using two complementary lenses: per-subgroup AUROC, which measures ranking ability, and equalized-odds TPR/FPR gaps at a fixed operating point, which measure the decisions the model would actually make. Three results stand out. First, age drives far larger disparities than sex on this dataset: sex AUROC gaps stay under 0.021 across four deep-dive labels, while age gaps reach 0.158 for Atelectasis and 0.102 for Pneumothorax, both concentrated in the 80+ bin. Second, the worst harm is a threshold effect the aggregate score hides: Pneumothorax reaches 0.859 AUROC yet splits true-positive rate by 0.125 between sexes at its operating point. Third, and the point of the paper, a standard group-balanced resampling mitigation did not hold. It preserved accuracy (macro AUROC 0.801 to 0.797) and narrowed three of four FPR gaps, but it quadrupled the Cardiomegaly TPR gap (0.020 to 0.089) and left the mean TPR gap slightly worse (0.049 to 0.054). We report the failure in full because subgroup fairness has to be re-measured per label and per metric after any intervention. Grad-CAM saliency per subgroup complements the numbers and shows where the model looks. All numbers come directly from the released audit CSVs, and the full pipeline is reproducible.
+
+## 1. Introduction
+
+Chest radiography is the highest-volume imaging exam in most health systems, and automated triage is one of the first places deep learning reaches the clinic. A model that reads well on average can still read poorly for a particular group of patients, and when that group is defined by age or sex the failure is a fairness problem with direct clinical cost. The question this paper asks is not whether such a classifier is accurate overall. It is where the classifier fails, along which demographic axis, at which decision, and whether a common mitigation actually repairs the gap it targets.
+
+We build a standard DenseNet121 baseline, audit it, attempt to fix it, and audit the fix. The contribution is not a new architecture or a new fairness algorithm. It is a reproducible measurement protocol applied honestly, including the case where the mitigation makes one label worse. Negative results of this kind are underreported in the fairness literature, and they are exactly what a practitioner needs before trusting a resampling fix in a clinical pipeline.
+
+## 2. Related work and delta
+
+Wang et al. released ChestX-ray14 with weakly supervised baselines [1]. Rajpurkar et al. (CheXNet) pushed per-label AUROC higher with a deeper training recipe [2]. Neither examined subgroup fairness.
+
+The closest prior work is CheXclusion [3], which audited classifiers on ChestX-ray14, MIMIC-CXR, and CheXpert and found consistent true-positive-rate disparities across sex, age, race, and insurance, with underserved groups more often underdiagnosed. Our work overlaps with CheXclusion on the finding that demographic TPR gaps exist and that age matters, and we treat that as replication rather than novelty.
+
+Our delta over CheXclusion is threefold. (1) We pair the ranking metric (per-subgroup AUROC) with the threshold metric (equalized-odds TPR/FPR at a validation-chosen Youden operating point) on the same labels, and show a case (Pneumothorax) where the two disagree in severity, so reporting only one would mislead. (2) We add per-subgroup Grad-CAM to check whether groups with worse numbers also attract different, possibly spurious model attention. (3) We test a mitigation and report its failure. CheXclusion measured gaps but did not close the loop with an intervention and a re-audit; we do, and the intervention does not reliably hold. The failed fix is the part a downstream team most needs to know about.
+
+## 3. Data and methods
+
+**Dataset.** ChestX-ray14 contains 112,120 frontal chest radiographs from 30,805 patients, each labeled for up to 14 pathologies. Labels were NLP-mined from radiology reports, not adjudicated per image, so they carry a known error rate. The release ships an official patient-level train/validation and test partition, which we use.
+
+**Leakage-free splits.** Images from one patient are correlated across views and follow-ups, so any patient appearing in two splits inflates test AUROC. We keep the official `test_list.txt` held out and carve validation from `train_val_list.txt` by patient ID, so no patient crosses splits. A unit test asserts zero patient-ID overlap between every pair of splits and gates the build.
+
+**Model and training.** DenseNet121 pretrained on ImageNet, with a 14-way sigmoid head and `BCEWithLogitsLoss` for independent multi-label prediction. Inputs are 224x224, trained with mixed precision. The reported model is a full-data run on a Kaggle T4 at batch size 64. Training early-stopped on validation macro AUROC (best at epoch 5, patience 3). A CUDA guard raises `SystemExit` when no GPU is visible, so a run cannot quietly fall back to CPU and report meaningless timings.
+
+**Fairness metrics.** Subgroups are sex (M/F) and age binned into `<40`, `40-60`, `60-80`, `80+`. For four deep-dive labels (Cardiomegaly, Effusion, Atelectasis, Pneumothorax) we report per-subgroup AUROC with gap defined as max minus min across subgroups, and equalized-odds TPR and FPR gaps at a single threshold chosen on validation by Youden's J (the point maximizing TPR minus FPR).
+
+**Mitigation.** We retrain with a `WeightedRandomSampler` that weights each example by 1 / group-size on the sex axis, equalizing how often each sex is sampled, then run the same audit and compare gaps directly.
+
+**Explainability.** Grad-CAM on `features.norm5` (the last DenseNet block) produces per-subgroup saliency for the most confident positive example in each subgroup.
+
+## 4. Results
+
+All values are read from the audit CSVs in `results/baseline/` and `results/mitigated/`. Test macro AUROC is 0.801, below the 0.840 validation peak, as expected for held-out data. Per-label ordering matches the ChestX-ray14 literature: Hernia (0.917), Emphysema (0.900), and Cardiomegaly (0.869) rank highest; Infiltration (0.684) and Pneumonia (0.712) lowest.
+
+**4.1 Age drives the disparity, not sex.** Table 1 contrasts the two axes on the four deep-dive labels. Sex AUROC gaps are all at or below 0.021. Age gaps are several times larger and land on the oldest patients.
+
+*Table 1. Subgroup AUROC gaps, baseline. Sex gap is |M minus F|; age gap is max minus min across the four age bins.*
+
+| Label | Sex gap | Age gap | Worst age bin (AUROC) |
+|---|---|---|---|
+| Cardiomegaly | 0.007 | 0.060 | 60-80 (0.835) |
+| Effusion | 0.018 | 0.036 | 80+ (0.798) |
+| Atelectasis | 0.021 | 0.158 | 80+ (0.622) |
+| Pneumothorax | 0.011 | 0.102 | 80+ (0.760) |
+
+Atelectasis AUROC on the 80+ group falls to 0.622 against 0.780 for under-40, and Pneumothorax drops to 0.760 on 80+. The oldest patients get the worst predictions on the labels where a miss matters most.
+
+**4.2 The worst harm is a threshold effect the aggregate hides.** Table 2 gives equalized-odds gaps on the sex axis. Pneumothorax is the standout: at a single operating point the model catches true positives in women far more often than in men (TPR 0.86 vs 0.74, gap 0.125) and also fires more false positives on women (FPR gap 0.098). Its aggregate AUROC of 0.859 gives no hint of this. Ranking fairness and decision fairness are different properties, and a model can look even on one while badly skewed on the other.
+
+*Table 2. Equalized-odds gaps (sex) at the Youden operating point, baseline.*
+
+| Label | TPR gap | FPR gap |
+|---|---|---|
+| Cardiomegaly | 0.020 | 0.016 |
+| Effusion | 0.001 | 0.023 |
+| Atelectasis | 0.051 | 0.011 |
+| Pneumothorax | 0.125 | 0.098 |
+
+**4.3 The mitigation does not hold.** Table 3 compares baseline and mitigated gaps on the sex axis the resampler targets. Macro AUROC moves only 0.801 to 0.797, so accuracy is preserved. The fairness effect is mixed. FPR gaps narrow on three of four labels, and the largest disparity (Pneumothorax) improves on both TPR and FPR. But the Cardiomegaly TPR gap blows up roughly fourfold (0.020 to 0.089), and the mean TPR gap across the four labels moves the wrong way (0.049 to 0.054).
+
+*Table 3. Baseline vs mitigated gaps (sex). Negative delta means the gap shrank.*
+
+| Label | Metric | Baseline | Mitigated | Delta |
+|---|---|---|---|---|
+| Cardiomegaly | TPR gap | 0.020 | 0.089 | +0.069 |
+| Effusion | TPR gap | 0.001 | 0.004 | +0.003 |
+| Atelectasis | TPR gap | 0.051 | 0.028 | -0.023 |
+| Pneumothorax | TPR gap | 0.125 | 0.095 | -0.029 |
+| Cardiomegaly | FPR gap | 0.016 | 0.027 | +0.011 |
+| Effusion | FPR gap | 0.023 | 0.017 | -0.006 |
+| Atelectasis | FPR gap | 0.011 | 0.001 | -0.010 |
+| Pneumothorax | FPR gap | 0.098 | 0.064 | -0.034 |
+
+Group-balanced resampling on sex did not reliably close the equalized-odds gaps, and it regressed one label badly. A single aggregate fairness score after the intervention would have called this a mild success. Only the per-label, per-metric re-audit shows the regression.
+
+**4.4 Grad-CAM.** Cardiomegaly is the cleanest case: heat sits tightly on the cardiac silhouette for both sexes and across every age bin, the region a radiologist reads for an enlarged heart, with confidence tapering only slightly in the oldest bin (p=0.77 at 80+ vs 0.85 under 40). The other labels are noisier. Pneumothorax is the most cautionary: the most confident male positive the model could find still scores only p=0.31 against p=0.68 for the female example, even though the heat falls on lung tissue in both. A low-confidence best positive is itself a finding. Grad-CAM shows where the model looks, not whether the label is correct, so these maps complement the AUROC and equalized-odds gaps rather than replacing them.
+
+## 5. Discussion
+
+Two practical lessons follow. First, a fairness audit that stops at sex would have declared this model roughly even, missing the 0.158 Atelectasis gap on the oldest patients. Age deserves first-class attention on this dataset, and audits should not default to sex alone. Second, mitigation must be re-audited at the granularity of the harm it claims to fix. Resampling improved the aggregate FPR picture and the single worst label, which is enough to look like progress, while quietly quadrupling a TPR gap elsewhere. Averaging over labels or over metrics would have hidden that. The safe reporting unit is per label and per metric, before and after.
+
+## 6. Limitations
+
+Labels are NLP-mined, not per-image adjudicated, and carry a non-trivial error rate. Compute is a single training run, so absolute AUROC is not tuned to match large-scale results. ChestX-ray14 provides only sex and age, with no race or ethnicity, so the audit cannot speak to other clinically relevant axes that CheXclusion could examine on other datasets. All results come from one institution's dataset with one label pipeline, with no external validation on a separate hospital system.
+
+## 7. Conclusion
+
+On a leakage-free ChestX-ray14 classifier, age produces larger subgroup disparities than sex, the worst single harm is a decision-threshold effect invisible to aggregate AUROC, and a standard group-balanced resampling mitigation does not reliably close the gap it targets and regresses one label fourfold. The failed mitigation is the central result: fairness interventions in medical imaging need a per-label, per-metric before-and-after audit, because an intervention that helps in aggregate can still harm a specific pathology, and only a direct re-audit surfaces it. The full pipeline and audit outputs are released for reproduction.
+
+## References
+
+[1] Wang X, Peng Y, Lu L, Lu Z, Bagheri M, Summers RM. ChestX-ray8: Hospital-scale Chest X-ray Database and Benchmarks on Weakly-Supervised Classification and Localization of Common Thorax Diseases. CVPR 2017.
+
+[2] Rajpurkar P, Irvin J, Zhu K, et al. CheXNet: Radiologist-Level Pneumonia Detection on Chest X-Rays with Deep Learning. arXiv:1711.05225, 2017.
+
+[3] Seyyed-Kalantari L, Liu G, McDermott M, Chen IY, Ghassemi M. CheXclusion: Fairness gaps in deep chest X-ray classifiers. Pacific Symposium on Biocomputing (PSB) 2021;26:232-243. arXiv:2003.00827.
