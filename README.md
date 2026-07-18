@@ -243,10 +243,48 @@ before/after audit surfaces it.
 
 ## Grad-CAM
 
-_Figures pending._ This section will present side-by-side Grad-CAM saliency
-maps for representative examples from each subgroup, for each deep-dive
-label, to visually assess whether the model attends to comparable anatomical
-regions across sex and age groups.
+For each deep-dive label we take the test example the baseline model is most
+confident is positive within each subgroup (a confident true positive, so the
+saliency is meaningful), compute a Grad-CAM heatmap on `features.norm5`, and
+overlay it on the 224x224 input. The `p=` under each map is the model's
+predicted probability for that label. Regenerate with:
+
+```bash
+python -m src.gradcam_figures \
+  --checkpoint checkpoints/baseline.pt \
+  --config configs/default.yaml \
+  --out results/baseline/gradcam
+```
+
+**Cardiomegaly** is the cleanest case. The heat sits tightly on the cardiac
+silhouette for both sexes and across every age bin, which is exactly the region
+a radiologist reads for an enlarged heart. This consistency is the encouraging
+half of the explainability story: the model is not keying off different, group-
+specific cues here. Confidence tapers only slightly in the oldest bin
+(p=0.77 at 80+ vs 0.85 under 40).
+
+| by sex | by age bin |
+|---|---|
+| ![Cardiomegaly Grad-CAM by sex](results/baseline/gradcam/gradcam_cardiomegaly_sex.png) | ![Cardiomegaly Grad-CAM by age](results/baseline/gradcam/gradcam_cardiomegaly_age_bin.png) |
+
+The remaining deep-dive labels are noisier, and the maps make that concrete
+rather than hiding it behind an aggregate number. For **Effusion** the male
+example localizes to a costophrenic/lung-base region (p=0.83) while the female
+map is more diffuse across the lung field (p=0.67). **Atelectasis** lands on the
+mid-to-lower lung in both sexes at moderate confidence. **Pneumothorax** is the
+most cautionary: the most confident *male* positive the model could find still
+scores only p=0.31, against p=0.68 for the female example, even though the heat
+does fall on lung tissue in both. A low-confidence "best" positive is itself a
+finding worth showing.
+
+| Effusion | Atelectasis | Pneumothorax |
+|---|---|---|
+| ![Effusion Grad-CAM by sex](results/baseline/gradcam/gradcam_effusion_sex.png) | ![Atelectasis Grad-CAM by sex](results/baseline/gradcam/gradcam_atelectasis_sex.png) | ![Pneumothorax Grad-CAM by sex](results/baseline/gradcam/gradcam_pneumothorax_sex.png) |
+
+Per-age-bin figures for every deep-dive label are written alongside these under
+`results/baseline/gradcam/`. Grad-CAM shows *where* the model looks, not whether
+the label is correct; these maps complement, and do not replace, the AUROC and
+equalized-odds gaps reported above.
 
 ## Limitations
 
