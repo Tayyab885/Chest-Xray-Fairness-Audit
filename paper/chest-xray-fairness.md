@@ -2,7 +2,7 @@
 
 **Muhammad Tayyab**
 
-*Workshop preprint. Target venues: MIDL, MICCAI FAIMI, ISBI. arXiv preprint as fallback.*
+*Workshop-style preprint, self-archived in this repository. Target venues: MIDL, MICCAI FAIMI, ISBI.*
 
 ## Abstract
 

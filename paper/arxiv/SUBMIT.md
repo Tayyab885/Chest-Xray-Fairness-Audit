@@ -1,5 +1,9 @@
 # arXiv submission notes
 
+Status: not submitted. The compiled PDF (`chest-xray-fairness.pdf`) is
+self-archived in this repository and stands on its own. These notes are kept
+only as a record of the source package, in case the preprint is submitted later.
+
 Source for the preprint. arXiv rebuilds the PDF from source on upload, so submit
 the source files, not the compiled PDF.
 
@@ -26,5 +30,5 @@ That is the whole package. The bibliography is inline (`thebibliography`), so no
 ## Local build (optional)
 `tectonic chest-xray-fairness.tex` from this directory rebuilds the PDF.
 
-## After it is live
+## If it is ever submitted and goes live
 Add the arXiv link to the repository README and cite the preprint ID in future work.
